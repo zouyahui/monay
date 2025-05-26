@@ -50,9 +50,10 @@ class MyNotificationListener : NotificationListenerService() {
         val title = extras.getString(Notification.EXTRA_TITLE) ?: return
         val text = extras.getString(Notification.EXTRA_TEXT) ?: return
 
-        // 在协程中解析交易信息并保存
-        serviceScope.launch {
-            transactionParser.parseAndSave(packageName, title, text)
+        // 根据包名处理不同的通知
+        when (packageName) {
+            ALIPAY_PACKAGE -> processAlipayNotification(title, text)
+            WECHAT_PACKAGE -> processWechatNotification(title, text)
         }
     }
 
@@ -63,7 +64,7 @@ class MyNotificationListener : NotificationListenerService() {
         Log.d(TAG, "处理支付宝通知: $title - $content")
         
         // 使用支付宝通知解析器解析通知内容
-        val transactionInfo = TransactionParser.parseAlipayNotification(title, content)
+        val transactionInfo = transactionParser.parseAlipayNotification(title, content)
         
         // 如果解析成功，保存交易记录
         if (transactionInfo.isValid) {
@@ -83,7 +84,7 @@ class MyNotificationListener : NotificationListenerService() {
         }
         
         // 使用微信通知解析器解析通知内容
-        val transactionInfo = TransactionParser.parseWechatNotification(title, content)
+        val transactionInfo = transactionParser.parseWechatNotification(title, content)
         
         // 如果解析成功，保存交易记录
         if (transactionInfo.isValid) {
