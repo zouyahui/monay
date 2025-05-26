@@ -1,8 +1,11 @@
 package com.example.monay.notification
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import javax.inject.Inject
@@ -25,11 +28,8 @@ class NotificationServiceManager @Inject constructor(
      */
     fun isNotificationServiceEnabled(): Boolean {
         val packageName = context.packageName
-        val enabledListeners = NotificationManagerCompat.getEnabledListenerPackages(context)
-        val isEnabled = enabledListeners.contains(packageName)
-        
-        Log.d(TAG, "通知监听服务启用状态: $isEnabled")
-        return isEnabled
+        val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+        return flat?.contains(packageName) == true
     }
     
     /**
@@ -58,26 +58,28 @@ class NotificationServiceManager @Inject constructor(
      * 切换通知监听服务状态
      * 这是一个通用方法，用于刷新系统对通知监听服务的绑定
      */
-    private fun toggleNotificationListenerService() {
-        Log.d(TAG, "切换通知监听服务状态")
-        
-        val componentName = context.packageName + "/" + MyNotificationListener::class.java.name
-        val cmd = "cmd notification " + (if (isNotificationServiceEnabled()) "disable" else "enable") + " listener $componentName"
-        
-        try {
-            Runtime.getRuntime().exec(cmd)
-        } catch (e: Exception) {
-            Log.e(TAG, "切换通知监听服务失败", e)
-        }
-        
-        // 稍等一会儿后再次切换回来
-        try {
-            Thread.sleep(1000)
-            Runtime.getRuntime().exec("cmd notification " + 
-                                       (if (isNotificationServiceEnabled()) "enable" else "disable") + 
-                                       " listener $componentName")
-        } catch (e: Exception) {
-            Log.e(TAG, "恢复通知监听服务失败", e)
-        }
+    fun toggleNotificationListenerService() {
+        val componentName = ComponentName(context, MyNotificationListener::class.java)
+        val packageManager = context.packageManager
+
+        // 切换服务状态
+        packageManager.setComponentEnabledSetting(
+            componentName,
+            if (isNotificationServiceEnabled()) {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            },
+            PackageManager.DONT_KILL_APP
+        )
+
+        // 重启服务
+        NotificationListenerService.requestRebind(componentName)
+    }
+
+    fun openNotificationListenerSettings() {
+        val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        context.startActivity(intent)
     }
 } 

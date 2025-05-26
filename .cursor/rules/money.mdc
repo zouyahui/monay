@@ -1,0 +1,9 @@
+---
+description: 每次都查看，规定了处理流程
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+每次修改完build一下确认有无编译错误

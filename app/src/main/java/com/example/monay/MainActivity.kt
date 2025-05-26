@@ -10,8 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
@@ -55,6 +54,29 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             MonayTheme {
+                var showPermissionDialog by remember { mutableStateOf(!notificationServiceManager.isNotificationServiceEnabled()) }
+
+                if (showPermissionDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showPermissionDialog = false },
+                        title = { Text("需要通知权限") },
+                        text = { Text("为了实现自动记账功能，需要获取通知访问权限。请在设置中允许访问通知。") },
+                        confirmButton = {
+                            Button(onClick = {
+                                notificationServiceManager.openNotificationListenerSettings()
+                                showPermissionDialog = false
+                            }) {
+                                Text("去设置")
+                            }
+                        },
+                        dismissButton = {
+                            Button(onClick = { showPermissionDialog = false }) {
+                                Text("取消")
+                            }
+                        }
+                    )
+                }
+
                 // 创建导航项
                 val navItems = listOf(
                     BottomNavItem(

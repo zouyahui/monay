@@ -28,22 +28,31 @@ class MyNotificationListener : NotificationListenerService() {
     @Inject // Inject BillRepository
     lateinit var billRepository: BillRepository
 
+    @Inject
+    lateinit var transactionParser: TransactionParser
+
     // Define a CoroutineScope for suspending functions
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(serviceJob)
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName
-        val extras = sbn.notification.extras
-        val title = extras.getString(Notification.EXTRA_TITLE) ?: ""
-        val text = extras.getString(Notification.EXTRA_TEXT) ?: ""
+        
+        // 只处理支付宝和微信的通知
+        if (packageName != WECHAT_PACKAGE && packageName != ALIPAY_PACKAGE) {
+            return
+        }
 
-        Log.d(TAG, "收到通知: 包名: $packageName, 标题: $title, 内容: $text")
+        val notification = sbn.notification
+        val extras = notification.extras
+        
+        // 获取通知的标题和内容
+        val title = extras.getString(Notification.EXTRA_TITLE) ?: return
+        val text = extras.getString(Notification.EXTRA_TEXT) ?: return
 
-        // 只处理支付宝和微信通知
-        when (packageName) {
-            ALIPAY_PACKAGE -> processAlipayNotification(title, text)
-            WECHAT_PACKAGE -> processWechatNotification(title, text)
+        // 在协程中解析交易信息并保存
+        serviceScope.launch {
+            transactionParser.parseAndSave(packageName, title, text)
         }
     }
 
