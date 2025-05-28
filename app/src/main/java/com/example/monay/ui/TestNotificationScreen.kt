@@ -82,6 +82,75 @@ fun TestNotificationScreen(context: Context) {
 
             Spacer(modifier = Modifier.height(16.dp))
             
+            // 特别强调的微信支付通知测试按钮 - 完全匹配真实格式
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "完全匹配真实微信通知",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "发送与截图完全一致的微信支付通知",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Button(
+                        onClick = {
+                            try {
+                                val notification = NotificationCompat.Builder(context, "test_channel")
+                                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                                    .setContentTitle("微信·现在")
+                                    .setContentText("微信支付\n已支付¥9.70")
+                                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                                    .setAutoCancel(true)
+                                    .build()
+                                
+                                // 使用随机ID确保通知不会被覆盖
+                                val notificationId = System.currentTimeMillis().toInt()
+                                notificationManager.notify(notificationId, notification)
+                                
+                                Log.d(TAG, "已发送真实格式微信支付测试通知: ID=$notificationId, 标题='微信·现在', 内容='微信支付\n已支付¥9.70'")
+                                snackbarMessage = "已发送真实格式微信支付测试通知"
+                                showSnackbar = true
+                            } catch (e: Exception) {
+                                Log.e(TAG, "发送通知失败", e)
+                                snackbarMessage = "发送通知失败: ${e.message}"
+                                showSnackbar = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text("发送真实格式微信通知", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            
             // 特别强调的微信支付通知测试按钮
             Card(
                 modifier = Modifier

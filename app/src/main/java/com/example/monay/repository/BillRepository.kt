@@ -1,6 +1,8 @@
 package com.example.monay.repository
 
+import android.content.Context
 import com.example.monay.data.*
+import com.example.monay.data.AppDatabase
 import kotlinx.coroutines.flow.Flow
 import java.util.*
 import javax.inject.Inject
@@ -105,5 +107,19 @@ class BillRepository @Inject constructor(private val billDao: BillDao) {
         val endTime = calendar.timeInMillis
         
         return TimeRange(startTime, endTime)
+    }
+    
+    companion object {
+        @Volatile
+        private var INSTANCE: BillRepository? = null
+        
+        fun getInstance(context: Context): BillRepository {
+            return INSTANCE ?: synchronized(this) {
+                val database = AppDatabase.getDatabase(context)
+                val instance = BillRepository(database.billDao())
+                INSTANCE = instance
+                instance
+            }
+        }
     }
 }

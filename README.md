@@ -12,6 +12,7 @@
 - **架构模式**: MVVM
 - **依赖注入**: Hilt
 - **网络请求**: Retrofit (如果适用)
+
 # 安卓记账工具
 
 ## 产品简介
@@ -53,6 +54,7 @@
 ## 联系与反馈
 
 如有建议或问题，请通过应用内反馈功能联系我们。 
+
 ## 功能模块
 
 1. **账单录入模块**
@@ -460,7 +462,7 @@
 
 - 修复问题：解决微信通知无法被正确接收和处理的问题
 - 改进措施：
-  1. 增强通知监听服务的日志记录，便于问题排查
+  1. 增强了通知监听服务的日志记录，便于问题排查
   2. 优化通知服务管理器，添加服务状态检查和自动修复功能
   3. 改进测试通知界面，使用高优先级通知确保通知能被系统传递
   4. 在应用启动时自动检查和修复通知监听服务
@@ -474,3 +476,160 @@
   - 增强了日志系统，提供更详细的调试信息
   - 优化了通知处理流程，提高通知解析的成功率
   - 改进了测试界面，使用高优先级通知和随机ID确保测试通知不会被覆盖
+
+### v1.3.5 测试通知功能优化（2025-05-29）
+
+#### 修复问题
+- 修复了应用内测试通知无法被正确识别和处理的问题
+- 优化了测试界面，添加了与真实微信通知完全匹配的测试按钮
+
+#### 技术改进
+- 重构了通知监听器（`MyNotificationListener`），添加了对测试通知的特殊处理逻辑
+- 增强了通知解析器（`TransactionParser`），添加了统一的通知解析入口方法
+- 优化了测试通知界面（`TestNotificationScreen`），使测试通知更接近真实场景
+
+#### 文件变更
+- `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+- `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+
+#### 技术说明
+1. 添加了测试通知识别机制，通过检查包名和通知内容来识别应用内发送的测试通知
+2. 为测试通知和真实通知提供统一的处理流程，确保测试结果与实际使用一致
+3. 增强了通知解析器的容错能力，支持多种格式的微信支付通知
+4. 优化了测试界面设计，提供更直观的测试体验
+
+### v1.3.6 编译问题修复（2025-05-30）
+
+#### 修复问题
+- 解决了项目编译错误，修复了未解析的引用和依赖注入问题
+- 修复了 LocalBroadcastManager 和 BuildConfig 引用未解析的问题
+- 解决了 DaggerNotificationComponent 未定义的问题
+- 修复了 Intent.putExtra 参数类型不匹配的问题
+- 解决了非协程上下文调用 suspend 函数的问题
+- 修复了 Hilt 的依赖注入冲突问题
+- 添加了 Room 数据库类型转换器
+- 解决了 AppDatabase 缺少 getDatabase 方法的问题
+
+#### 技术改进
+- 添加了 LocalBroadcastManager 和 Kotlin 序列化依赖
+- 创建了 NotificationComponent 和 NotificationModule 用于依赖注入
+- 修改 TransactionInfo 类使其实现 Serializable 接口
+- 在 BillRepository 中添加了 getInstance 静态方法
+- 优化了协程的使用，确保 suspend 函数在协程作用域内调用
+- 添加了 Hilt 编译选项，禁用 InstallIn 检查
+- 创建了 Room 数据库类型转换器，支持 LocalDateTime 类型
+- 优化了 AppDatabase 单例模式的实现
+
+#### 文件变更
+- `app/build.gradle.kts`：添加依赖和编译选项
+- `app/src/main/java/com/example/monay/notification/TransactionParser.kt`：修改 TransactionInfo 类
+- `app/src/main/java/com/example/monay/notification/NotificationComponent.kt`：新增文件
+- `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`：修复依赖注入
+- `app/src/main/java/com/example/monay/repository/BillRepository.kt`：添加 getInstance 方法
+- `app/src/main/java/com/example/monay/data/AppDatabase.kt`：添加 getDatabase 方法
+- `app/src/main/java/com/example/monay/data/Converters.kt`：新增文件
+
+#### 技术说明
+1. **依赖注入优化**：
+   - 创建专用的 NotificationComponent 用于非 Hilt 管理的组件
+   - 使用 Dagger 的 @Component 和 @Module 注解创建独立的依赖图
+   - 通过 KSP 参数禁用 Hilt 的 InstallIn 检查
+
+2. **序列化支持**：
+   - 使 TransactionInfo 实现 Serializable，以便通过 Intent 传递
+   - 添加 Kotlin 序列化依赖，支持更高效的对象序列化
+
+3. **协程使用规范**：
+   - 确保 suspend 函数在适当的协程作用域内调用
+   - 使用 CoroutineScope(Dispatchers.IO) 处理数据库操作
+
+4. **单例模式**：
+   - 为 BillRepository 和 AppDatabase 添加线程安全的单例获取方法
+   - 使用双重检查锁定模式确保线程安全
+
+5. **Room 数据库优化**：
+   - 添加 TypeConverters 支持 LocalDateTime 类型
+   - 实现数据库单例模式，避免多实例导致的资源浪费
+
+### v1.3.5 测试通知功能优化（2025-05-29）
+
+#### 修复问题
+- 修复了应用内测试通知无法被正确识别和处理的问题
+- 优化了测试界面，添加了与真实微信通知完全匹配的测试按钮
+
+#### 技术改进
+- 重构了通知监听器（`MyNotificationListener`），添加了对测试通知的特殊处理逻辑
+- 增强了通知解析器（`TransactionParser`），添加了统一的通知解析入口方法
+- 优化了测试通知界面（`TestNotificationScreen`），使测试通知更接近真实场景
+
+#### 文件变更
+- `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+- `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+
+#### 技术说明
+1. 添加了测试通知识别机制，通过检查包名和通知内容来识别应用内发送的测试通知
+2. 为测试通知和真实通知提供统一的处理流程，确保测试结果与实际使用一致
+3. 增强了通知解析器的容错能力，支持多种格式的微信支付通知
+4. 优化了测试界面设计，提供更直观的测试体验
+
+### v1.3.4 微信通知监听服务优化（2025-05-28）
+
+#### 修复问题
+- 解决了微信通知无法被正确接收和处理的问题
+- 修复了通知服务可能停止工作的问题
+
+#### 技术改进
+- 增强了通知监听服务的日志记录，便于问题诊断
+- 优化了通知服务管理器，添加了服务状态检查和自动修复功能
+- 在应用启动时自动检查和修复通知监听服务
+
+#### 文件变更
+- `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- `app/src/main/java/com/example/monay/notification/NotificationServiceManager.kt`
+- `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+- `app/src/main/java/com/example/monay/MainActivity.kt`
+
+#### 技术说明
+1. 通知服务状态检查与自动修复：添加了检查通知服务是否正常运行的机制，并在服务异常时自动尝试重启
+2. 增强的日志系统：添加了详细的日志记录，包括通知接收、解析过程和错误处理
+3. 通知处理流程优化：改进了通知内容提取和解析逻辑，提高了成功率
+
+### v1.3.3 账单统计功能优化（2025-05-20）
+
+#### 新增功能
+- 添加了月度收支趋势图表
+- 新增按类别的支出分布饼图
+- 支持自定义日期范围的收支统计
+
+#### 技术改进
+- 使用 MPAndroidChart 库实现图表展示
+- 优化了统计数据的计算逻辑，提高了性能
+- 改进了UI布局，使用Material Design 3的组件
+
+#### 文件变更
+- `app/src/main/java/com/example/monay/ui/StatisticsScreen.kt`
+- `app/src/main/java/com/example/monay/viewmodel/StatisticsViewModel.kt`
+- `app/build.gradle` (添加MPAndroidChart依赖)
+
+### v1.3.2 UI界面优化（2025-05-15）
+
+#### 改进
+- 全面升级到Material Design 3
+- 支持动态主题颜色（基于壁纸）
+- 优化了暗黑模式下的显示效果
+- 改进了列表加载性能
+
+#### 技术改进
+- 使用Material 3的组件替换旧组件
+- 实现了自定义主题管理器
+- 优化了Compose组件的重组逻辑
+
+### v1.3.1 首次发布（2025-05-10）
+
+- 基本记账功能
+- 微信、支付宝通知监听
+- 手动记账
+- 账单列表和详情查看
+- 简单的收支统计

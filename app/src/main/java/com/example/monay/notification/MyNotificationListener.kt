@@ -12,20 +12,16 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.monay.MainActivity
 import com.example.monay.R
-import com.example.monay.data.BillEntity
-import com.example.monay.repository.BillRepository
-import dagger.hilt.android.AndroidEntryPoint
-import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-@AndroidEntryPoint
 class MyNotificationListener : NotificationListenerService() {
 
     companion object {
@@ -39,17 +35,21 @@ class MyNotificationListener : NotificationListenerService() {
     @Inject
     lateinit var transactionParser: TransactionParser
 
-    @Inject
-    lateinit var billRepository: BillRepository
-
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(serviceJob)
+
+    private val targetPackages = listOf("com.tencent.mm", "com.eg.android.AlipayGphone")
+    
+    // 应用包名，用于识别测试通知
+    private val appPackageName = "com.example.monay"
 
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "通知监听服务创建")
         createNotificationChannel()
         startForeground()
+        // 使用我们创建的组件进行依赖注入
+        NotificationComponent.create(applicationContext).inject(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -94,79 +94,144 @@ class MyNotificationListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        val packageName = sbn.packageName
-        
-        // 记录所有收到的通知
-        Log.d(TAG, "收到通知: 包名=$packageName")
-        
-        // 只处理支付宝和微信的通知
-        if (packageName != WECHAT_PACKAGE && packageName != ALIPAY_PACKAGE) {
-            Log.d(TAG, "跳过非目标应用通知: $packageName")
-            return
+        try {
+            val packageName = sbn.packageName
+            val notification = sbn.notification
+            
+            // 记录所有收到的通知
+            Log.d(TAG, "收到通知: 包名=$packageName, ID=${sbn.id}")
+            
+            // 检查是否是来自应用内的测试通知
+            val isTestNotification = isTestNotification(packageName, notification)
+            
+            // 如果不是目标应用的通知且不是测试通知，则跳过
+            if (!targetPackages.contains(packageName) && !isTestNotification) {
+                Log.d(TAG, "跳过非目标应用通知: $packageName")
+                return
+            }
+            
+            // 获取通知的标题和内容
+            val extras = notification.extras
+            val title = extras.getString(Notification.EXTRA_TITLE)
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            
+            // 记录通知详情
+            Log.d(TAG, "处理通知: 包名=$packageName, 标题=$title, 内容=$text")
+            
+            // 检查通知是否包含必要信息
+            if (title == null || text == null) {
+                Log.w(TAG, "通知缺少标题或内容，跳过处理")
+                return
+            }
+            
+            // 特殊处理测试通知
+            if (isTestNotification) {
+                Log.i(TAG, "检测到测试通知: 标题=$title, 内容=$text")
+                // 如果是微信支付测试通知，使用与真实微信通知相同的处理流程
+                if (title.contains("微信") && (text.contains("支付") || text.contains("已支付"))) {
+                    Log.i(TAG, "处理微信支付测试通知")
+                    processNotification(packageName, title, text, true)
+                    return
+                }
+            }
+            
+            // 处理实际通知
+            processNotification(packageName, title, text, false)
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "处理通知时发生异常", e)
         }
-
-        val notification = sbn.notification
-        val extras = notification.extras
+    }
+    
+    /**
+     * 判断是否为应用内发送的测试通知
+     */
+    private fun isTestNotification(packageName: String, notification: Notification): Boolean {
+        // 检查包名是否为应用自身
+        if (packageName != appPackageName) {
+            return false
+        }
         
         // 获取通知的标题和内容
-        val title = extras.getString(Notification.EXTRA_TITLE)
-        val text = extras.getString(Notification.EXTRA_TEXT)
+        val extras = notification.extras
+        val title = extras.getString(Notification.EXTRA_TITLE) ?: return false
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: return false
         
-        Log.d(TAG, "通知详情: 包名=$packageName, 标题=$title, 内容=$text")
+        // 检查通知内容是否符合测试通知特征
+        val isMockWechatPay = title.contains("微信") && (text.contains("支付") || text.contains("已支付"))
+        val isMockAlipay = title.contains("支付宝") && (text.contains("付款") || text.contains("转"))
         
-        if (title == null) {
-            Log.e(TAG, "通知标题为空，跳过处理")
-            return
+        val isTestNotification = isMockWechatPay || isMockAlipay
+        if (isTestNotification) {
+            Log.d(TAG, "检测到应用内测试通知: $title - $text")
         }
         
-        if (text == null) {
-            Log.e(TAG, "通知内容为空，跳过处理")
-            return
-        }
+        return isTestNotification
+    }
 
-        // 增加详细日志
-        if (packageName == WECHAT_PACKAGE) {
-            Log.d(TAG, "微信通知详情: 标题='$title', 内容='$text'")
-            
-            // 检查是否是微信支付相关通知
-            val isWechatPay = title.contains("微信") || text.contains("微信支付")
-            Log.d(TAG, "是否是微信支付相关通知: $isWechatPay")
-            
-            if (isWechatPay) {
-                // 尝试匹配金额
-                val patterns = listOf(
-                    """已支付¥(\d+(\.\d{1,2})?)""".toRegex(),
-                    """¥(\d+(\.\d{1,2})?)""".toRegex(),
-                    """(\d+(\.\d{1,2})?)元""".toRegex()
-                )
-                
-                var matched = false
-                for ((index, pattern) in patterns.withIndex()) {
-                    val matchResult = pattern.find(text)
-                    if (matchResult != null) {
-                        Log.d(TAG, "使用模式${index + 1}成功匹配金额: ${matchResult.groupValues[1]}")
-                        matched = true
-                        break
-                    }
-                }
-                
-                if (!matched) {
-                    Log.d(TAG, "所有金额匹配模式均未成功")
-                }
-            }
-        } else if (packageName == ALIPAY_PACKAGE) {
-            Log.d(TAG, "支付宝通知详情: 标题='$title', 内容='$text'")
-        }
-
-        // 在协程中处理通知
-        serviceScope.launch {
+    private fun processNotification(packageName: String, title: String, text: String, isTestNotification: Boolean) {
+        CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d(TAG, "开始解析通知: 包名=$packageName, 标题=$title, 内容=$text")
-                transactionParser.parseAndSave(packageName, title, text)
-                Log.d(TAG, "通知解析完成")
+                Log.d(TAG, "开始解析通知: 包名=$packageName, 标题=$title, 内容=$text, 是测试通知=$isTestNotification")
+                
+                // 对于微信支付通知，记录更详细的日志
+                if (packageName == "com.tencent.mm" || 
+                    (isTestNotification && title.contains("微信"))) {
+                    logWechatNotificationDetails(title, text)
+                }
+                
+                val transaction = transactionParser.parseNotification(packageName, title, text)
+                if (transaction != null) {
+                    Log.i(TAG, "成功解析交易: $transaction")
+                    
+                    // 发送广播通知应用其他部分
+                    val intent = Intent("com.example.monay.TRANSACTION_DETECTED")
+                    intent.putExtra("transaction", transaction)
+                    LocalBroadcastManager.getInstance(this@MyNotificationListener).sendBroadcast(intent)
+                    
+                    // 发送系统通知提示用户
+                    withContext(Dispatchers.Main) {
+                        // 这里可以添加一个系统通知，提示用户已成功记录交易
+                    }
+                } else {
+                    Log.w(TAG, "无法解析交易信息: 包名=$packageName, 标题=$title, 内容=$text")
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "处理通知失败", e)
+                Log.e(TAG, "解析通知时发生异常", e)
             }
+        }
+    }
+    
+    /**
+     * 记录微信通知的详细信息，用于调试
+     */
+    private fun logWechatNotificationDetails(title: String, text: String) {
+        Log.d(TAG, "微信通知详情分析:")
+        Log.d(TAG, "- 标题: '$title'")
+        Log.d(TAG, "- 内容: '$text'")
+        
+        // 检查标题格式
+        if (title == "微信·现在" || title.contains("微信支付")) {
+            Log.d(TAG, "- 标题匹配微信支付通知格式")
+        } else {
+            Log.d(TAG, "- 标题不匹配标准微信支付通知格式")
+        }
+        
+        // 检查内容格式
+        if (text.contains("已支付")) {
+            Log.d(TAG, "- 内容包含'已支付'关键词")
+            
+            // 尝试提取金额
+            val amountRegex = "已支付¥([0-9.]+)".toRegex()
+            val matchResult = amountRegex.find(text)
+            if (matchResult != null) {
+                val amount = matchResult.groupValues[1]
+                Log.d(TAG, "- 成功提取金额: ¥$amount")
+            } else {
+                Log.d(TAG, "- 无法提取金额，正则表达式不匹配")
+            }
+        } else {
+            Log.d(TAG, "- 内容不包含'已支付'关键词")
         }
     }
 

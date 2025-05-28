@@ -62,6 +62,10 @@ android {
     }
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
+        arg("dagger.hilt.disableModulesHaveInstallInCheck", "true")
+    }
+    hilt {
+        enableAggregatingTask = true
     }
 }
 
@@ -109,4 +113,10 @@ dependencies {
 
     // MPAndroidChart 图表库
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+
+    // 添加 LocalBroadcastManager 依赖
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
+    
+    // 添加 Kotlin 序列化依赖
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 }

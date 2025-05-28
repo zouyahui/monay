@@ -9,6 +9,10 @@ import com.example.monay.data.BillEntity
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.io.Serializable
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * 交易解析结果数据类
@@ -20,7 +24,7 @@ data class TransactionInfo(
     val merchant: String = "",
     val category: String = "其他",
     val remark: String = ""
-)
+) : Serializable
 
 /**
  * 交易通知解析器
@@ -34,6 +38,7 @@ class TransactionParser @Inject constructor(
         private const val TAG = "TransactionParser"
         private const val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
         private const val WECHAT_PACKAGE = "com.tencent.mm"
+        private const val APP_PACKAGE = "com.example.monay"
     }
     
     // 支付宝支付通知模式：[支付宝] 支付宝成功收款0.01元。
@@ -47,6 +52,52 @@ class TransactionParser @Inject constructor(
     
     // 微信转账通知模式：[微信] 你已成功收款0.01元
     private val WECHAT_TRANSFER_PATTERN = Pattern.compile("你已成功(收款|付款)(\\d+(\\.\\d+)?)元")
+    
+    /**
+     * 解析通知并返回交易信息
+     * 这是一个统一的入口方法，支持处理实际通知和测试通知
+     */
+    fun parseNotification(packageName: String, title: String, content: String): TransactionInfo? {
+        Log.d(TAG, "解析通知: 包名=$packageName, 标题=$title, 内容=$content")
+        
+        try {
+            // 根据包名确定处理方法
+            val transactionInfo = when {
+                packageName == ALIPAY_PACKAGE -> parseAlipayNotification(title, content)
+                packageName == WECHAT_PACKAGE -> parseWechatNotification(title, content)
+                packageName == APP_PACKAGE && title.contains("微信") -> {
+                    // 处理应用内的微信测试通知
+                    Log.d(TAG, "处理微信测试通知")
+                    parseWechatNotification(title, content)
+                }
+                packageName == APP_PACKAGE && title.contains("支付宝") -> {
+                    // 处理应用内的支付宝测试通知
+                    Log.d(TAG, "处理支付宝测试通知")
+                    parseAlipayNotification(title, content)
+                }
+                else -> {
+                    Log.w(TAG, "未知包名通知: $packageName")
+                    return null
+                }
+            }
+            
+            // 如果成功解析出有效交易信息，保存到数据库
+            if (transactionInfo.isValid) {
+                Log.i(TAG, "成功解析交易信息: $transactionInfo")
+                // 在协程中调用 suspend 函数
+                CoroutineScope(Dispatchers.IO).launch {
+                    saveBillFromTransaction(transactionInfo)
+                }
+                return transactionInfo
+            } else {
+                Log.w(TAG, "无法解析有效交易信息")
+                return null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "解析通知时发生异常", e)
+            return null
+        }
+    }
     
     /**
      * 解析支付宝通知
@@ -127,6 +178,29 @@ class TransactionParser @Inject constructor(
             )
         }
         
+        // 尝试其他格式的微信支付通知匹配
+        // 格式1: 只匹配"¥9.70"
+        var amount: Double? = null
+        val regex2 = """¥(\d+(\.\d{1,2})?)""".toRegex()
+        val match2 = regex2.find(content)
+        if (match2 != null) {
+            amount = match2.groupValues[1].toDoubleOrNull()
+            if (amount != null) {
+                // 提取商家信息
+                val merchant = extractMerchant(content)
+                val category = categorizeTransaction(merchant, content)
+                
+                return TransactionInfo(
+                    isValid = true,
+                    type = "支出",
+                    amount = amount,
+                    merchant = merchant,
+                    category = category,
+                    remark = content
+                )
+            }
+        }
+        
         // 处理微信转账通知
         matcher = WECHAT_TRANSFER_PATTERN.matcher(content)
         if (matcher.find()) {
@@ -186,6 +260,34 @@ class TransactionParser @Inject constructor(
             lowerContent.contains("打车") || lowerContent.contains("地铁") -> "交通"
             else -> "其他"
         }
+    }
+
+    /**
+     * 将TransactionInfo保存为账单
+     */
+    private suspend fun saveBillFromTransaction(transaction: TransactionInfo) {
+        if (!transaction.isValid || transaction.amount <= 0) {
+            Log.w(TAG, "无效的交易信息，无法保存账单: $transaction")
+            return
+        }
+        
+        val type = when (transaction.type) {
+            "收入" -> BillType.INCOME
+            "支出" -> BillType.EXPENSE
+            else -> BillType.EXPENSE
+        }
+        
+        val bill = Bill(
+            amount = transaction.amount,
+            type = type,
+            category = transaction.category,
+            note = transaction.remark,
+            date = LocalDateTime.now()
+        )
+        
+        val billEntity = BillEntity.fromBill(bill)
+        billRepository.insertBill(billEntity)
+        Log.i(TAG, "成功保存账单: $billEntity")
     }
 
     suspend fun parseAndSave(packageName: String, title: String, content: String) {
