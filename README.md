@@ -423,3 +423,54 @@
 3. 添加更多的交易类型支持
 4. 优化自动分类算法
 5. 添加用户自定义分类规则
+
+### v1.3.2 微信支付通知解析优化（2025-05-28）
+
+- 修复问题：修复了微信支付通知无法正确解析和记录的问题
+- 改进措施：
+  1. 增强了微信支付通知标题匹配逻辑，支持"微信支付-现在"等多种格式
+  2. 优化了金额提取算法，支持多种金额格式（"已支付¥9.90"、"¥9.90"、"9.90元"）
+  3. 增加了详细的日志记录，便于问题排查
+  4. 改进了商家名称提取逻辑
+- 涉及文件：
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- 技术说明：
+  - 使用正则表达式级联匹配多种通知格式
+  - 增强了日志记录系统，添加更多调试信息
+  - 优化了异常处理，提高系统稳定性
+
+### v1.3.3 微信支付通知解析进一步优化（2025-05-28）
+
+- 修复问题：根据真实微信支付通知格式优化解析逻辑
+- 改进措施：
+  1. 适配"微信·现在"这种真实通知标题格式
+  2. 修改内容匹配逻辑，针对"微信支付 已支付¥9.70"格式进行解析
+  3. 优化商家名称提取算法，更准确地识别交易对象
+  4. 增强日志记录，提供更详细的解析过程信息
+- 涉及文件：
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- 技术说明：
+  - 基于真实通知样本优化匹配算法
+  - 实现多级解析策略，提高解析成功率
+  - 增强边缘情况处理，提高系统稳定性
+
+### v1.3.4 微信通知监听服务优化（2025-05-28）
+
+- 修复问题：解决微信通知无法被正确接收和处理的问题
+- 改进措施：
+  1. 增强通知监听服务的日志记录，便于问题排查
+  2. 优化通知服务管理器，添加服务状态检查和自动修复功能
+  3. 改进测试通知界面，使用高优先级通知确保通知能被系统传递
+  4. 在应用启动时自动检查和修复通知监听服务
+- 涉及文件：
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/notification/NotificationServiceManager.kt`
+  - `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+  - `app/src/main/java/com/example/monay/MainActivity.kt`
+- 技术说明：
+  - 实现了通知服务状态检查和自动修复机制
+  - 增强了日志系统，提供更详细的调试信息
+  - 优化了通知处理流程，提高通知解析的成功率
+  - 改进了测试界面，使用高优先级通知和随机ID确保测试通知不会被覆盖

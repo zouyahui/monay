@@ -180,60 +180,12 @@ class TransactionParser @Inject constructor(
         val lowerContent = content.lowercase()
         val lowerMerchant = merchant.lowercase()
         
-        // 食品和餐饮
-        if (lowerContent.contains("餐") || lowerContent.contains("饭") || 
-            lowerContent.contains("食") || lowerContent.contains("超市") ||
-            lowerMerchant.contains("餐厅") || lowerMerchant.contains("食品") ||
-            lowerMerchant.contains("超市") || lowerMerchant.contains("外卖")) {
-            return "餐饮"
+        return when {
+            lowerContent.contains("外卖") || lowerMerchant.contains("外卖") -> "餐饮"
+            lowerContent.contains("超市") || lowerMerchant.contains("超市") -> "购物"
+            lowerContent.contains("打车") || lowerContent.contains("地铁") -> "交通"
+            else -> "其他"
         }
-        
-        // 交通
-        if (lowerContent.contains("打车") || lowerContent.contains("出租") || 
-            lowerContent.contains("地铁") || lowerContent.contains("公交") ||
-            lowerContent.contains("高铁") || lowerContent.contains("车费") ||
-            lowerMerchant.contains("交通")) {
-            return "交通"
-        }
-        
-        // 购物
-        if (lowerContent.contains("购物") || lowerContent.contains("商城") || 
-            lowerContent.contains("淘宝") || lowerContent.contains("京东") ||
-            lowerMerchant.contains("商城") || lowerMerchant.contains("购物") ||
-            lowerMerchant.contains("店")) {
-            return "购物"
-        }
-        
-        // 娱乐
-        if (lowerContent.contains("电影") || lowerContent.contains("游戏") || 
-            lowerContent.contains("娱乐") || lowerContent.contains("影院") ||
-            lowerMerchant.contains("电影") || lowerMerchant.contains("娱乐")) {
-            return "娱乐"
-        }
-        
-        // 住房
-        if (lowerContent.contains("房租") || lowerContent.contains("水电") || 
-            lowerContent.contains("物业") || lowerContent.contains("住宿") ||
-            lowerMerchant.contains("房屋") || lowerMerchant.contains("物业")) {
-            return "住房"
-        }
-        
-        // 医疗
-        if (lowerContent.contains("医院") || lowerContent.contains("药店") || 
-            lowerContent.contains("医疗") || lowerContent.contains("诊所") ||
-            lowerMerchant.contains("医院") || lowerMerchant.contains("药")) {
-            return "医疗"
-        }
-        
-        // 教育
-        if (lowerContent.contains("学校") || lowerContent.contains("教育") || 
-            lowerContent.contains("培训") || lowerContent.contains("课程") ||
-            lowerMerchant.contains("教育") || lowerMerchant.contains("学校")) {
-            return "教育"
-        }
-        
-        // 默认分类
-        return "其他"
     }
 
     suspend fun parseAndSave(packageName: String, title: String, content: String) {
@@ -246,39 +198,44 @@ class TransactionParser @Inject constructor(
     }
 
     private suspend fun handleAlipayNotification(title: String, content: String) {
-        when {
-            title.contains("支付宝支付通知") -> {
-                val amount = extractAmount(content)
-                if (amount > 0) {
-                    saveBill(
-                        amount = amount,
-                        type = BillType.INCOME,
-                        category = "支付宝收款",
-                        note = content
-                    )
-                }
+        Log.d(TAG, "处理支付宝通知: title=$title, content=$content")
+        
+        // 处理支付宝支付通知
+        if (content.contains("成功付款")) {
+            val regex = """付款(\d+(\.\d{1,2})?)元""".toRegex()
+            val matchResult = regex.find(content)
+            val amount = matchResult?.groupValues?.get(1)?.toDoubleOrNull()
+            
+            if (amount != null && amount > 0) {
+                // 提取商家信息
+                val merchant = content.substringAfter("商家: ").substringBefore("\n").trim()
+                
+                saveBill(
+                    amount = amount,
+                    type = BillType.EXPENSE,
+                    category = categorizeTransaction(merchant, content),
+                    note = "$merchant: $content"
+                )
+                Log.d(TAG, "成功保存支付宝支付记录: 金额=$amount, 商家=$merchant")
             }
-            title.contains("支付宝通知") && content.contains("转账") && content.contains("给你") -> {
-                val amount = extractAmount(content)
-                if (amount > 0) {
-                    saveBill(
-                        amount = amount,
-                        type = BillType.INCOME,
-                        category = "转账收款",
-                        note = content
-                    )
-                }
-            }
-            content.contains("成功支付") -> {
-                val amount = extractAmount(content)
-                if (amount > 0) {
-                    saveBill(
-                        amount = amount,
-                        type = BillType.EXPENSE,
-                        category = "支付宝支付",
-                        note = content
-                    )
-                }
+        }
+        // 处理支付宝转账通知
+        else if (content.contains("向你转了")) {
+            val regex = """向你转了(\d+(\.\d{1,2})?)元""".toRegex()
+            val matchResult = regex.find(content)
+            val amount = matchResult?.groupValues?.get(1)?.toDoubleOrNull()
+            
+            if (amount != null && amount > 0) {
+                // 提取转账人姓名
+                val sender = content.substringBefore("向你转了").trim()
+                
+                saveBill(
+                    amount = amount,
+                    type = BillType.INCOME,
+                    category = "转账",
+                    note = "来自${sender}的转账"
+                )
+                Log.d(TAG, "成功保存支付宝转账记录: 金额=$amount, 来自=$sender")
             }
         }
     }
@@ -286,46 +243,97 @@ class TransactionParser @Inject constructor(
     private suspend fun handleWechatNotification(title: String, content: String) {
         Log.d(TAG, "处理微信通知: title=$title, content=$content")
         
-        // 处理微信支付通知
-        if (title == "微信支付·现在") {
-            val amount = extractAmount(content)
-            if (amount > 0) {
+        // 处理微信支付通知 - 适应真实通知格式
+        // 检查内容是否包含"微信支付"和"已支付"关键词
+        if (content.contains("微信支付") && (content.contains("已支付") || content.contains("¥"))) {
+            // 尝试多种格式匹配金额
+            var amount: Double? = null
+            var matchedPattern = ""
+            
+            // 格式1: "已支付¥9.70"
+            val regex1 = """已支付¥(\d+(\.\d{1,2})?)""".toRegex()
+            val match1 = regex1.find(content)
+            if (match1 != null) {
+                amount = match1.groupValues[1].toDoubleOrNull()
+                matchedPattern = "已支付¥"
+            }
+            
+            // 格式2: 只匹配"¥9.70"
+            if (amount == null) {
+                val regex2 = """¥(\d+(\.\d{1,2})?)""".toRegex()
+                val match2 = regex2.find(content)
+                if (match2 != null) {
+                    amount = match2.groupValues[1].toDoubleOrNull()
+                    matchedPattern = "¥"
+                }
+            }
+            
+            // 格式3: 匹配数字后跟"元"
+            if (amount == null) {
+                val regex3 = """(\d+(\.\d{1,2})?)元""".toRegex()
+                val match3 = regex3.find(content)
+                if (match3 != null) {
+                    amount = match3.groupValues[1].toDoubleOrNull()
+                    matchedPattern = "元"
+                }
+            }
+            
+            if (amount != null && amount > 0) {
+                // 提取商家名称
+                // 对于"微信支付 已支付¥9.70"格式，没有明确的商家名称
+                // 尝试从内容中提取可能的商家信息
+                val lines = content.split("\n")
+                var merchant = "未知商家"
+                
+                // 如果有多行，第一行可能是"微信支付"，第二行可能是商家
+                if (lines.size > 1) {
+                    merchant = lines[1].trim()
+                } else if (lines.isNotEmpty()) {
+                    // 如果只有一行，尝试提取"微信支付"之前的内容作为商家
+                    val contentBeforeKeyword = lines[0].substringBefore("微信支付").trim()
+                    if (contentBeforeKeyword.isNotEmpty()) {
+                        merchant = contentBeforeKeyword
+                    }
+                }
+                
+                Log.d(TAG, "成功匹配微信支付金额: $amount, 使用模式: $matchedPattern, 商家: $merchant")
+                
                 saveBill(
                     amount = amount,
                     type = BillType.EXPENSE,
-                    category = "微信支付",
+                    category = categorizeTransaction(merchant, content),
                     note = content
                 )
-                Log.d(TAG, "成功保存微信支付记录: 金额=$amount")
+                Log.d(TAG, "成功保存微信支付记录: 金额=$amount, 商家=$merchant")
+            } else {
+                Log.e(TAG, "无法从内容中提取金额: $content")
             }
         }
         // 处理微信转账通知
-        else if (title == "微信" && content.contains("转账")) {
-            val amount = extractAmount(content)
-            if (amount > 0) {
-                val type = if (content.contains("向你转账") || content.contains("收款成功")) {
+        else if (content.contains("转账")) {
+            val regex = """转账(\d+(\.\d{1,2})?)元""".toRegex()
+            val matchResult = regex.find(content)
+            val amount = matchResult?.groupValues?.get(1)?.toDoubleOrNull()
+            
+            if (amount != null && amount > 0) {
+                val type = if (content.contains("向你转账")) {
                     BillType.INCOME
                 } else {
                     BillType.EXPENSE
                 }
+                
+                // 提取转账人姓名
+                val sender = content.substringBefore("向你转账").trim()
+                
                 saveBill(
                     amount = amount,
                     type = type,
                     category = "转账",
-                    note = content
+                    note = if (type == BillType.INCOME) "来自${sender}的转账" else "转账给${sender}"
                 )
                 Log.d(TAG, "成功保存微信转账记录: 金额=$amount, 类型=$type")
             }
         }
-    }
-
-    private fun extractAmount(content: String): Double {
-        // 匹配 ¥ 符号后面的数字
-        val regex = """¥(\d+(\.\d{1,2})?)""".toRegex()
-        val matchResult = regex.find(content)
-        val amount = matchResult?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
-        Log.d(TAG, "提取金额: content=$content, amount=$amount")
-        return amount
     }
 
     private suspend fun saveBill(

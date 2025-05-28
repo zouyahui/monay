@@ -96,8 +96,12 @@ class MyNotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName
         
+        // 记录所有收到的通知
+        Log.d(TAG, "收到通知: 包名=$packageName")
+        
         // 只处理支付宝和微信的通知
         if (packageName != WECHAT_PACKAGE && packageName != ALIPAY_PACKAGE) {
+            Log.d(TAG, "跳过非目标应用通知: $packageName")
             return
         }
 
@@ -105,15 +109,61 @@ class MyNotificationListener : NotificationListenerService() {
         val extras = notification.extras
         
         // 获取通知的标题和内容
-        val title = extras.getString(Notification.EXTRA_TITLE) ?: return
-        val text = extras.getString(Notification.EXTRA_TEXT) ?: return
+        val title = extras.getString(Notification.EXTRA_TITLE)
+        val text = extras.getString(Notification.EXTRA_TEXT)
+        
+        Log.d(TAG, "通知详情: 包名=$packageName, 标题=$title, 内容=$text")
+        
+        if (title == null) {
+            Log.e(TAG, "通知标题为空，跳过处理")
+            return
+        }
+        
+        if (text == null) {
+            Log.e(TAG, "通知内容为空，跳过处理")
+            return
+        }
 
-        Log.d(TAG, "收到通知: 包名=$packageName, 标题=$title, 内容=$text")
+        // 增加详细日志
+        if (packageName == WECHAT_PACKAGE) {
+            Log.d(TAG, "微信通知详情: 标题='$title', 内容='$text'")
+            
+            // 检查是否是微信支付相关通知
+            val isWechatPay = title.contains("微信") || text.contains("微信支付")
+            Log.d(TAG, "是否是微信支付相关通知: $isWechatPay")
+            
+            if (isWechatPay) {
+                // 尝试匹配金额
+                val patterns = listOf(
+                    """已支付¥(\d+(\.\d{1,2})?)""".toRegex(),
+                    """¥(\d+(\.\d{1,2})?)""".toRegex(),
+                    """(\d+(\.\d{1,2})?)元""".toRegex()
+                )
+                
+                var matched = false
+                for ((index, pattern) in patterns.withIndex()) {
+                    val matchResult = pattern.find(text)
+                    if (matchResult != null) {
+                        Log.d(TAG, "使用模式${index + 1}成功匹配金额: ${matchResult.groupValues[1]}")
+                        matched = true
+                        break
+                    }
+                }
+                
+                if (!matched) {
+                    Log.d(TAG, "所有金额匹配模式均未成功")
+                }
+            }
+        } else if (packageName == ALIPAY_PACKAGE) {
+            Log.d(TAG, "支付宝通知详情: 标题='$title', 内容='$text'")
+        }
 
         // 在协程中处理通知
         serviceScope.launch {
             try {
+                Log.d(TAG, "开始解析通知: 包名=$packageName, 标题=$title, 内容=$text")
                 transactionParser.parseAndSave(packageName, title, text)
+                Log.d(TAG, "通知解析完成")
             } catch (e: Exception) {
                 Log.e(TAG, "处理通知失败", e)
             }

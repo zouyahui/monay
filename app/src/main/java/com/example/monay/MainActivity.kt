@@ -1,6 +1,7 @@
 package com.example.monay
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -31,6 +33,7 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import com.example.monay.ui.AddBillScreen
 import com.example.monay.ui.BillInputData
 import com.example.monay.ui.StatisticsScreen
+import com.example.monay.ui.TestNotificationScreen
 import com.example.monay.data.BillEntity
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
@@ -52,6 +55,13 @@ class MainActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 检查并修复通知服务
+        if (notificationServiceManager.isNotificationServiceEnabled()) {
+            Log.d("MainActivity", "通知监听权限已授予，检查服务状态")
+            notificationServiceManager.checkAndFixNotificationService()
+        }
+        
         setContent {
             MonayTheme {
                 var showPermissionDialog by remember { mutableStateOf(!notificationServiceManager.isNotificationServiceEnabled()) }
@@ -63,7 +73,7 @@ class MainActivity : AppCompatActivity() {
                         text = { Text("为了实现自动记账功能，需要获取通知访问权限。请在设置中允许访问通知。") },
                         confirmButton = {
                             Button(onClick = {
-                                notificationServiceManager.openNotificationListenerSettings()
+                                notificationServiceManager.checkAndRequestNotificationPermission()
                                 showPermissionDialog = false
                             }) {
                                 Text("去设置")
@@ -88,6 +98,11 @@ class MainActivity : AppCompatActivity() {
                         route = "statistics",
                         title = "统计",
                         icon = Icons.Default.BarChart
+                    ),
+                    BottomNavItem(
+                        route = "test",
+                        title = "测试",
+                        icon = Icons.Default.BugReport
                     )
                 )
                 
@@ -156,6 +171,10 @@ class MainActivity : AppCompatActivity() {
                                 viewModel = billViewModel,
                                 onNavigateToAddBill = { navController.navigate("addBill") }
                             )
+                        }
+
+                        composable("test") {
+                            TestNotificationScreen(context = this@MainActivity)
                         }
                         
                         composable("addBill") {
