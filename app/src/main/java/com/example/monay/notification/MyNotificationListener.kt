@@ -29,7 +29,11 @@ class MyNotificationListener : NotificationListenerService() {
         private const val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
         private const val WECHAT_PACKAGE = "com.tencent.mm"
         private const val NOTIFICATION_CHANNEL_ID = "monay_service"
+        private const val TRANSACTION_CHANNEL_ID = "transaction_notification"
         private const val FOREGROUND_NOTIFICATION_ID = 1
+        private const val TRANSACTION_NOTIFICATION_BASE_ID = 1000
+        private var lastNotificationTime = 0L
+        private const val MIN_NOTIFICATION_INTERVAL = 3000 // 3秒最小间隔
     }
 
     @Inject
@@ -59,7 +63,8 @@ class MyNotificationListener : NotificationListenerService() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            // 服务通知渠道
+            val serviceChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
                 "自动记账服务",
                 NotificationManager.IMPORTANCE_LOW
@@ -68,8 +73,19 @@ class MyNotificationListener : NotificationListenerService() {
                 setShowBadge(false)
             }
 
+            // 交易记录通知渠道
+            val transactionChannel = NotificationChannel(
+                TRANSACTION_CHANNEL_ID,
+                "交易记录通知",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "用于通知用户交易已记录"
+                setShowBadge(true)
+            }
+
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+            notificationManager.createNotificationChannel(serviceChannel)
+            notificationManager.createNotificationChannel(transactionChannel)
         }
     }
 
@@ -191,7 +207,7 @@ class MyNotificationListener : NotificationListenerService() {
                     
                     // 发送系统通知提示用户
                     withContext(Dispatchers.Main) {
-                        // 这里可以添加一个系统通知，提示用户已成功记录交易
+                        showTransactionNotification(transaction)
                     }
                 } else {
                     Log.w(TAG, "无法解析交易信息: 包名=$packageName, 标题=$title, 内容=$text")
@@ -200,6 +216,46 @@ class MyNotificationListener : NotificationListenerService() {
                 Log.e(TAG, "解析通知时发生异常", e)
             }
         }
+    }
+    
+    /**
+     * 显示交易记录通知
+     */
+    private fun showTransactionNotification(transaction: TransactionInfo) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastNotificationTime < MIN_NOTIFICATION_INTERVAL) {
+            Log.d(TAG, "通知频率过高，延迟显示交易通知")
+            return
+        }
+        lastNotificationTime = currentTime
+        
+        val intent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val amountText = if (transaction.type == "支出") "-¥${transaction.amount}" else "+¥${transaction.amount}"
+        val title = "${transaction.type}已自动记录"
+        val content = "${transaction.merchant}: $amountText (${transaction.category})"
+        
+        val notification = NotificationCompat.Builder(this, TRANSACTION_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(content)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        
+        val notificationId = TRANSACTION_NOTIFICATION_BASE_ID + (Math.random() * 1000).toInt()
+        
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(notificationId, notification)
+        
+        Log.d(TAG, "已显示交易记录通知: $title, $content, ID=$notificationId")
     }
     
     /**

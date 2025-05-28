@@ -633,3 +633,139 @@
 - 手动记账
 - 账单列表和详情查看
 - 简单的收支统计
+
+### v1.3.7 交易记录通知功能（2025-05-30）
+
+- **新增功能**：添加交易记录通知功能，当成功解析并记录交易时，显示系统通知提醒用户
+- **改进措施**：
+  - 创建专门的交易记录通知渠道，与服务通知渠道分开
+  - 优化通知显示格式，支出显示"-¥xx.xx"，收入显示"+¥xx.xx"
+  - 点击通知可直接打开应用主界面
+- **涉及文件**：
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+- **技术说明**：
+  - 实现了`showTransactionNotification`方法，用于显示交易记录通知
+  - 通知内容包括交易类型、商家名称、金额和分类
+  - 使用`NotificationCompat.Builder`构建通知，确保兼容性
+  - 设置`PendingIntent`实现点击通知打开主界面的功能
+
+### v1.3.6 构建问题修复与优化（2025-05-29）
+
+- **修复问题**：
+  - 解决了多个编译错误，包括未解析的引用、依赖注入问题和参数类型不匹配等
+  - 修复了`Intent.putExtra`参数类型不匹配的问题
+  - 解决了在非协程上下文中调用suspend函数的问题
+  - 修复了Hilt依赖注入冲突
+  - 添加了Room数据库类型转换器，解决了`LocalDateTime`类型转换问题
+  - 修复了`AppDatabase`中缺少`getDatabase`方法的问题
+- **技术改进**：
+  - 添加了`LocalBroadcastManager`和Kotlin序列化的依赖
+  - 创建了`NotificationComponent`用于依赖注入
+  - 修改了`TransactionInfo`类实现`Serializable`接口
+  - 优化了协程的使用，确保在正确的上下文中调用suspend函数
+  - 在`build.gradle.kts`中添加了禁用Hilt模块检查的配置
+- **涉及文件**：
+  - `app/build.gradle.kts`
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+  - `app/src/main/java/com/example/monay/notification/NotificationComponent.kt`
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/repository/BillRepository.kt`
+  - `app/src/main/java/com/example/monay/database/AppDatabase.kt`
+  - `app/src/main/java/com/example/monay/database/Converters.kt`（新增）
+- **技术说明**：
+  - 依赖注入优化：使用Dagger创建`NotificationComponent`，解决了Hilt的限制
+  - 序列化支持：添加了Kotlin序列化库，确保`TransactionInfo`对象可以通过Intent传递
+  - 协程使用规范：确保suspend函数在协程作用域内调用，避免阻塞主线程
+  - 单例模式实现：确保`BillRepository`和`AppDatabase`遵循单例模式
+  - Room数据库优化：添加类型转换器支持`LocalDateTime`类型的存储和检索
+
+### v1.3.5 微信通知测试功能优化（2025-05-28）
+
+- **修复问题**：解决了测试通知无法被正确识别和处理的问题
+- **改进措施**：
+  - 增强了通知监听器，使其能够识别并处理来自应用内的测试通知
+  - 优化了测试通知的解析逻辑，确保测试通知能够被正确解析为交易信息
+  - 增加了详细的日志记录，便于调试通知处理过程
+- **涉及文件**：
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+- **技术说明**：
+  - 实现了`isTestNotification`方法，用于识别来自应用内的测试通知
+  - 增加了对测试通知的特殊处理逻辑，使其能够像真实通知一样被处理
+  - 添加了更详细的日志记录，包括通知包名、标题、内容等信息
+  - 优化了微信通知的解析逻辑，提高了解析成功率
+
+### v1.3.4 微信通知监听服务优化（2025-05-28）
+
+- **修复问题**：解决了微信通知无法被正确接收和处理的问题
+- **改进措施**：
+  - 增强了通知监听服务的日志记录，便于调试
+  - 优化了通知服务管理器，提供更可靠的服务状态检查和修复机制
+  - 在应用启动时自动检查和修复通知监听服务
+  - 优化了测试通知界面，提供更直观的测试体验
+- **涉及文件**：
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/notification/NotificationServiceManager.kt`
+  - `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+  - `app/src/main/java/com/example/monay/MainActivity.kt`
+- **技术说明**：
+  - 通知服务状态检查：实现了`isNotificationServiceRunning`方法，用于检查服务是否正在运行
+  - 自动修复机制：实现了`checkAndFixNotificationService`方法，在服务异常时尝试重启
+  - 增强日志系统：添加了详细的日志记录，包括服务状态变化、通知接收和处理过程
+  - 优化通知处理流程：改进了通知过滤和解析逻辑，提高了识别率
+
+### v1.3.3 账单统计功能优化（2025-05-20）
+
+#### 新增功能
+- 添加了月度收支趋势图表
+- 新增按类别的支出分布饼图
+- 支持自定义日期范围的收支统计
+
+#### 技术改进
+- 使用 MPAndroidChart 库实现图表展示
+- 优化了统计数据的计算逻辑，提高了性能
+- 改进了UI布局，使用Material Design 3的组件
+
+#### 文件变更
+- `app/src/main/java/com/example/monay/ui/StatisticsScreen.kt`
+- `app/src/main/java/com/example/monay/viewmodel/StatisticsViewModel.kt`
+- `app/build.gradle` (添加MPAndroidChart依赖)
+
+### v1.3.2 UI界面优化（2025-05-15）
+
+#### 改进
+- 全面升级到Material Design 3
+- 支持动态主题颜色（基于壁纸）
+- 优化了暗黑模式下的显示效果
+- 改进了列表加载性能
+
+#### 技术改进
+- 使用Material 3的组件替换旧组件
+- 实现了自定义主题管理器
+- 优化了Compose组件的重组逻辑
+
+### v1.3.1 首次发布（2025-05-10）
+
+- 基本记账功能
+- 微信、支付宝通知监听
+- 手动记账
+- 账单列表和详情查看
+- 简单的收支统计
+
+### v1.3.8 解决自动记账显示问题（2025-05-30）
+
+- **修复问题**：解决自动记账后账单不显示在UI界面的问题
+- **改进措施**：
+  - 解决系统通知"Muting recently noisy"错误，使用随机通知ID和频率控制
+  - 优化通知监听服务与MainActivity的通信机制
+  - 实现更可靠的广播接收处理流程
+  - 改进账单保存逻辑，确保事务数据正确存储
+- **涉及文件**：
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+  - `app/src/main/java/com/example/monay/MainActivity.kt`
+- **技术说明**：
+  - **通知系统优化**：为避免通知被系统静音，实现了随机通知ID和最小通知间隔机制
+  - **广播接收机制**：在MainActivity中添加TransactionReceiver，接收并处理交易广播
+  - **数据流优化**：实现从通知解析 → 广播传递 → UI更新的完整数据流
+  - **错误处理**：增强了日志记录和异常处理，便于问题诊断

@@ -1,5 +1,9 @@
 package com.example.monay
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -35,8 +39,10 @@ import com.example.monay.ui.BillInputData
 import com.example.monay.ui.StatisticsScreen
 import com.example.monay.ui.TestNotificationScreen
 import com.example.monay.data.BillEntity
+import com.example.monay.notification.TransactionInfo
 import kotlinx.coroutines.launch
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.monay.notification.NotificationServiceManager
 import javax.inject.Inject
 
@@ -53,8 +59,67 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var notificationServiceManager: NotificationServiceManager
     
+    private val billViewModel: BillViewModel by viewModels()
+    
+    // 添加本地广播接收器以接收交易通知
+    private val transactionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            Log.d("MainActivity", "收到交易广播")
+            if (intent.action == "com.example.monay.TRANSACTION_DETECTED") {
+                val transaction = intent.getSerializableExtra("transaction") as? TransactionInfo
+                if (transaction != null) {
+                    Log.d("MainActivity", "收到交易信息: $transaction")
+                    handleTransaction(transaction)
+                }
+            }
+        }
+    }
+    
+    private fun handleTransaction(transaction: TransactionInfo) {
+        lifecycleScope.launch {
+            try {
+                val billType = when (transaction.type) {
+                    "收入" -> "收入"
+                    "支出" -> "支出"
+                    else -> "支出"
+                }
+                
+                val billEntity = BillEntity(
+                    accountId = 1,
+                    type = billType,
+                    category = transaction.category,
+                    amount = transaction.amount,
+                    time = System.currentTimeMillis(),
+                    remark = transaction.remark
+                )
+                
+                Log.d("MainActivity", "准备保存账单: $billEntity")
+                billViewModel.insertBill(billEntity)
+                Log.d("MainActivity", "账单已保存到ViewModel")
+                
+                // 可选：显示Toast通知用户
+                runOnUiThread {
+                    showToast("已自动记录${transaction.type}: ¥${transaction.amount}")
+                }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "保存账单时出错", e)
+            }
+        }
+    }
+    
+    private fun showToast(message: String) {
+        // 在这里实现Toast提示，也可以使用Snackbar
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // 注册广播接收器
+        LocalBroadcastManager.getInstance(this).registerReceiver(
+            transactionReceiver,
+            IntentFilter("com.example.monay.TRANSACTION_DETECTED")
+        )
         
         // 检查并修复通知服务
         if (notificationServiceManager.isNotificationServiceEnabled()) {
@@ -107,7 +172,6 @@ class MainActivity : AppCompatActivity() {
                 )
                 
                 val navController = rememberNavController()
-                val billViewModel: BillViewModel by viewModels()
                 
                 // 获取当前导航状态
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -197,6 +261,12 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+    
+    override fun onDestroy() {
+        // 注销广播接收器
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(transactionReceiver)
+        super.onDestroy()
     }
 }
 

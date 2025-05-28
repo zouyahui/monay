@@ -271,23 +271,35 @@ class TransactionParser @Inject constructor(
             return
         }
         
-        val type = when (transaction.type) {
-            "收入" -> BillType.INCOME
-            "支出" -> BillType.EXPENSE
-            else -> BillType.EXPENSE
+        try {
+            // 转换交易类型为账单类型
+            val billType = when (transaction.type) {
+                "收入" -> BillType.INCOME
+                "支出" -> BillType.EXPENSE
+                else -> BillType.EXPENSE
+            }
+            
+            // 创建账单实体并直接保存
+            val billEntity = BillEntity(
+                accountId = 1,
+                type = transaction.type, // 使用原始类型字符串（支出/收入）
+                category = transaction.category,
+                amount = transaction.amount,
+                time = System.currentTimeMillis(), // 使用当前时间戳
+                remark = transaction.remark
+            )
+            
+            // 保存账单
+            val insertedId = billRepository.insertBill(billEntity)
+            
+            if (insertedId > 0) {
+                Log.i(TAG, "成功保存账单: $billEntity")
+            } else {
+                Log.e(TAG, "保存账单失败，返回ID: $insertedId")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "保存账单时发生异常", e)
         }
-        
-        val bill = Bill(
-            amount = transaction.amount,
-            type = type,
-            category = transaction.category,
-            note = transaction.remark,
-            date = LocalDateTime.now()
-        )
-        
-        val billEntity = BillEntity.fromBill(bill)
-        billRepository.insertBill(billEntity)
-        Log.i(TAG, "成功保存账单: $billEntity")
     }
 
     suspend fun parseAndSave(packageName: String, title: String, content: String) {
