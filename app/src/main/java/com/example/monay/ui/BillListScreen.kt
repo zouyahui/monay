@@ -1,6 +1,7 @@
 package com.example.monay.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,6 +74,7 @@ fun BillListScreen(
     notificationServiceManager: NotificationServiceManager,
     onDeleteBill: (Int) -> Unit = {}
 ) {
+    // 使用remember来缓存状态，避免不必要的重组
     var hasNotificationPermission by remember { 
         mutableStateOf(notificationServiceManager.isNotificationServiceEnabled()) 
     }
@@ -81,96 +83,38 @@ fun BillListScreen(
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // 使用derivedStateOf优化列表性能
+    val sortedBills by remember(bills) {
+        derivedStateOf {
+            bills.sortedByDescending { it.time }
+        }
+    }
+
     // 创建 ActivityResultLauncher 来启动设置并处理结果
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { _ ->
-        // 从设置返回后重新检查权限
-        val permissionGranted = notificationServiceManager.isNotificationServiceEnabled()
-        Log.d("BillListScreen", "权限检查结果: $permissionGranted")
-        hasNotificationPermission = permissionGranted
-        
-        // 如果权限已授予，尝试重启通知监听服务确保正常运行
-        if (hasNotificationPermission) {
-            coroutineScope.launch {
+        coroutineScope.launch {
+            // 将权限检查移到协程中执行
+            val permissionGranted = notificationServiceManager.isNotificationServiceEnabled()
+            hasNotificationPermission = permissionGranted
+            
+            if (hasNotificationPermission) {
                 notificationServiceManager.restartNotificationService()
                 showPermissionDialog = false
-                
-                // 显示服务已启用信息
                 showServiceInfoDialog = true
-                delay(3000) // 显示3秒后自动关闭
+                delay(3000)
                 showServiceInfoDialog = false
             }
         }
     }
 
+    // 使用LaunchedEffect替代直接调用
     LaunchedEffect(Unit) {
         hasNotificationPermission = notificationServiceManager.isNotificationServiceEnabled()
         if (!hasNotificationPermission) {
             showPermissionDialog = true
         }
-    }
-
-    // 权限对话框
-    if (showPermissionDialog) {
-        AlertDialog(
-            onDismissRequest = { showPermissionDialog = false },
-            title = { Text("通知读取权限") },
-            text = { 
-                Column {
-                    Text("为了自动记录支付宝和微信交易，请授予应用通知读取权限。")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "开启后，记账应用可以自动读取支付宝、微信的支付通知，实现自动记账，无需手动输入。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                    )
-                }
-            },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Notifications,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            },
-            confirmButton = {
-                Button(onClick = {
-                    val intent = notificationServiceManager.getNotificationSettingsIntent()
-                    permissionLauncher.launch(intent)
-                }) {
-                    Text("前往设置")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) {
-                    Text("稍后再说")
-                }
-            }
-        )
-    }
-    
-    // 服务启用成功提示
-    if (showServiceInfoDialog) {
-        AlertDialog(
-            onDismissRequest = { showServiceInfoDialog = false },
-            title = { Text("自动记账已启用") },
-            text = { 
-                Text("支付宝和微信的交易将被自动记录。您可以在任何时候在设置中关闭此功能。")
-            },
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.CheckCircle,
-                    contentDescription = null,
-                    tint = IncomeColor
-                )
-            },
-            confirmButton = {
-                Button(onClick = { showServiceInfoDialog = false }) {
-                    Text("知道了")
-                }
-            }
-        )
     }
 
     Scaffold(
@@ -182,132 +126,244 @@ fun BillListScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 actions = {
-                    // 添加通知服务状态指示器
-                    Box(
-                        modifier = Modifier.padding(end = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        IconButton(
-                            onClick = { 
-                                if (hasNotificationPermission) {
-                                    showServiceInfoDialog = true
-                                } else {
-                                    showPermissionDialog = true
-                                }
+                    NotificationStatusIcon(
+                        hasPermission = hasNotificationPermission,
+                        onIconClick = {
+                            if (hasNotificationPermission) {
+                                showServiceInfoDialog = true
+                            } else {
+                                showPermissionDialog = true
                             }
-                        ) {
-                            Icon(
-                                imageVector = if (hasNotificationPermission) 
-                                    Icons.Default.Notifications 
-                                else 
-                                    Icons.Default.NotificationsOff,
-                                contentDescription = "通知权限状态",
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
                         }
-                    }
+                    )
                 }
             ) 
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = onNavigateToAddBill,
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(
-                    Icons.Filled.Add, 
-                    contentDescription = "添加新账单",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            AddBillFab(onNavigateToAddBill)
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { padding ->
-        if (bills.isEmpty()) {
-            // 空状态
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Notifications,
-                        contentDescription = null,
-                        modifier = Modifier.size(100.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = "暂无账单记录",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "点击右下角的加号按钮添加新账单，或打开通知权限自动记录支付记录",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                }
-            }
-        } else {
-            // 账单列表
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(
-                    start = 16.dp,
-                    top = padding.calculateTopPadding() + 8.dp,
-                    end = 16.dp,
-                    bottom = padding.calculateBottomPadding() + 8.dp
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(bills.size) { index ->
-                    val bill = bills[index]
-                    
-                    // 创建滑动删除状态
-                    val dismissState = rememberDismissState(
-                        confirmStateChange = { dismissValue ->
-                            if (dismissValue == DismissValue.DismissedToStart) {
-                                // 显示确认删除对话框
-                                coroutineScope.launch {
-                                    val result = snackbarHostState.showSnackbar(
-                                        message = "确定要删除这条账单记录吗？",
-                                        actionLabel = "确定",
-                                        duration = SnackbarDuration.Long
-                                    )
-                                    if (result == SnackbarResult.ActionPerformed) {
-                                        onDeleteBill(bill.id.toInt())
-                                    }
-                                }
-                                false // 不自动删除，等待用户确认
-                            } else {
-                                false
-                            }
-                        }
-                    )
-                    
-                    SwipeToDismiss(
-                        state = dismissState,
-                        directions = setOf(DismissDirection.EndToStart),
-                        background = {
-                            DismissBackground(dismissState)
-                        },
-                        dismissContent = {
-                            BillCard(bill = bill)
-                        }
-                    )
-                }
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            if (bills.isEmpty()) {
+                EmptyBillState()
+            } else {
+                BillList(
+                    bills = sortedBills,
+                    onDeleteBill = onDeleteBill,
+                    snackbarHostState = snackbarHostState,
+                    coroutineScope = coroutineScope
+                )
             }
         }
+
+        // 对话框
+        if (showPermissionDialog) {
+            NotificationPermissionDialog(
+                onDismiss = { showPermissionDialog = false },
+                onConfirm = {
+                    val intent = notificationServiceManager.getNotificationSettingsIntent()
+                    permissionLauncher.launch(intent)
+                }
+            )
+        }
+        
+        if (showServiceInfoDialog) {
+            ServiceEnabledDialog(
+                onDismiss = { showServiceInfoDialog = false }
+            )
+        }
     }
+}
+
+@Composable
+private fun NotificationStatusIcon(
+    hasPermission: Boolean,
+    onIconClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier.padding(end = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        IconButton(onClick = onIconClick) {
+            Icon(
+                imageVector = if (hasPermission) 
+                    Icons.Default.Notifications 
+                else 
+                    Icons.Default.NotificationsOff,
+                contentDescription = "通知权限状态",
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddBillFab(onClick: () -> Unit) {
+    FloatingActionButton(
+        onClick = onClick,
+        containerColor = MaterialTheme.colorScheme.primary
+    ) {
+        Icon(
+            Icons.Filled.Add, 
+            contentDescription = "添加新账单",
+            tint = MaterialTheme.colorScheme.onPrimary
+        )
+    }
+}
+
+@Composable
+private fun EmptyBillState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Notifications,
+                contentDescription = null,
+                modifier = Modifier.size(100.dp),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "暂无账单记录",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "点击右下角的加号按钮添加新账单，或打开通知权限自动记录支付记录",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterialApi::class)
+@Composable
+private fun BillList(
+    bills: List<BillEntity>,
+    onDeleteBill: (Int) -> Unit,
+    snackbarHostState: SnackbarHostState,
+    coroutineScope: CoroutineScope
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(
+            count = bills.size,
+            key = { bills[it].id.toInt() }  // 添加key提高性能
+        ) { index ->
+            val bill = bills[index]
+            val dismissState = rememberDismissState(
+                confirmStateChange = { dismissValue ->
+                    if (dismissValue == DismissValue.DismissedToStart) {
+                        coroutineScope.launch {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "确定要删除这条账单记录吗？",
+                                actionLabel = "确定",
+                                duration = SnackbarDuration.Long
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                onDeleteBill(bill.id.toInt())
+                            }
+                        }
+                        false
+                    } else {
+                        false
+                    }
+                }
+            )
+            
+            SwipeToDismiss(
+                state = dismissState,
+                directions = setOf(DismissDirection.EndToStart),
+                background = {
+                    DismissBackground(dismissState)
+                },
+                dismissContent = {
+                    BillCard(bill = bill)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotificationPermissionDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("通知读取权限") },
+        text = { 
+            Column {
+                Text("为了自动记录支付宝和微信交易，请授予应用通知读取权限。")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "开启后，记账应用可以自动读取支付宝、微信的支付通知，实现自动记账，无需手动输入。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                )
+            }
+        },
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Notifications,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirm) {
+                Text("前往设置")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("稍后再说")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ServiceEnabledDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("自动记账已启用") },
+        text = { 
+            Text("支付宝和微信的交易将被自动记录。您可以在任何时候在设置中关闭此功能。")
+        },
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = IncomeColor
+            )
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("知道了")
+            }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -351,7 +407,7 @@ fun DismissBackground(dismissState: DismissState) {
 @Composable
 fun BillCard(bill: BillEntity) {
     val (iconVector, iconTint, backgroundColor) = when(bill.type.lowercase()) {
-        "支出" -> Triple(getBillCategoryIcon(bill.category), ExpenseColor, ExpenseColor.copy(alpha = 0.1f))
+        "支出" -> Triple(Icons.Default.ArrowDownward, ExpenseColor, ExpenseColor.copy(alpha = 0.1f))
         "收入" -> Triple(Icons.Default.ArrowUpward, IncomeColor, IncomeColor.copy(alpha = 0.1f))
         "转账" -> Triple(Icons.Default.SwapHoriz, TransferColor, TransferColor.copy(alpha = 0.1f))
         else -> Triple(Icons.Default.ShoppingCart, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
@@ -377,11 +433,20 @@ fun BillCard(bill: BillEntity) {
                 modifier = Modifier
                     .size(50.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(backgroundColor),
+                    .background(backgroundColor)
+                    .border(
+                        width = 1.dp,
+                        color = iconTint.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(12.dp)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = iconVector,
+                    imageVector = if (bill.type.lowercase() == "支出" || bill.type.lowercase() == "收入") {
+                        iconVector
+                    } else {
+                        getBillCategoryIcon(bill.category)
+                    },
                     contentDescription = null,
                     tint = iconTint,
                     modifier = Modifier.size(28.dp)
@@ -419,20 +484,32 @@ fun BillCard(bill: BillEntity) {
             }
             
             // 金额
-            Text(
-                text = getFormattedAmount(bill.type, bill.amount),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = iconTint
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End
+            ) {
+                Icon(
+                    imageVector = iconVector,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = getFormattedAmount(bill.type, bill.amount),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = iconTint
+                )
+            }
         }
     }
 }
 
 fun getFormattedAmount(type: String, amount: Double): String {
     return when(type.lowercase()) {
-        "支出" -> "-¥%.2f".format(amount)
-        "收入" -> "+¥%.2f".format(amount)
+        "支出" -> "¥%.2f".format(amount)
+        "收入" -> "¥%.2f".format(amount)
         else -> "¥%.2f".format(amount)
     }
 }

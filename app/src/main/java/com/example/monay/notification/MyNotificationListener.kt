@@ -1,14 +1,23 @@
 package com.example.monay.notification
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-// Import Hilt annotations
+import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.example.monay.MainActivity
+import com.example.monay.R
+import com.example.monay.data.BillEntity
+import com.example.monay.repository.BillRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import com.example.monay.repository.BillRepository
-import android.app.Notification
-import android.util.Log
-import com.example.monay.data.BillEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -16,24 +25,73 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@AndroidEntryPoint // Add Hilt entry point annotation
+@AndroidEntryPoint
 class MyNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MyNotificationListener"
         private const val ALIPAY_PACKAGE = "com.eg.android.AlipayGphone"
         private const val WECHAT_PACKAGE = "com.tencent.mm"
+        private const val NOTIFICATION_CHANNEL_ID = "monay_service"
+        private const val FOREGROUND_NOTIFICATION_ID = 1
     }
-
-    @Inject // Inject BillRepository
-    lateinit var billRepository: BillRepository
 
     @Inject
     lateinit var transactionParser: TransactionParser
 
-    // Define a CoroutineScope for suspending functions
+    @Inject
+    lateinit var billRepository: BillRepository
+
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(serviceJob)
+
+    override fun onCreate() {
+        super.onCreate()
+        Log.d(TAG, "通知监听服务创建")
+        createNotificationChannel()
+        startForeground()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d(TAG, "通知监听服务启动")
+        return START_STICKY
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "自动记账服务",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "用于保持自动记账服务运行"
+                setShowBadge(false)
+            }
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun startForeground() {
+        val notificationIntent = Intent(this, MainActivity::class.java)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            notificationIntent,
+            PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("自动记账服务运行中")
+            .setContentText("正在监听支付宝和微信的支付通知")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        startForeground(FOREGROUND_NOTIFICATION_ID, notification)
+    }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val packageName = sbn.packageName
@@ -50,109 +108,33 @@ class MyNotificationListener : NotificationListenerService() {
         val title = extras.getString(Notification.EXTRA_TITLE) ?: return
         val text = extras.getString(Notification.EXTRA_TEXT) ?: return
 
-        // 根据包名处理不同的通知
-        when (packageName) {
-            ALIPAY_PACKAGE -> processAlipayNotification(title, text)
-            WECHAT_PACKAGE -> processWechatNotification(title, text)
-        }
-    }
+        Log.d(TAG, "收到通知: 包名=$packageName, 标题=$title, 内容=$text")
 
-    /**
-     * 处理支付宝通知
-     */
-    private fun processAlipayNotification(title: String, content: String) {
-        Log.d(TAG, "处理支付宝通知: $title - $content")
-        
-        // 使用支付宝通知解析器解析通知内容
-        val transactionInfo = transactionParser.parseAlipayNotification(title, content)
-        
-        // 如果解析成功，保存交易记录
-        if (transactionInfo.isValid) {
-            saveTransaction(transactionInfo, "支付宝")
-        }
-    }
-
-    /**
-     * 处理微信通知
-     */
-    private fun processWechatNotification(title: String, content: String) {
-        Log.d(TAG, "处理微信通知: $title - $content")
-        
-        // 过滤非支付相关通知
-        if (!isPaymentRelatedNotification(title, content)) {
-            return
-        }
-        
-        // 使用微信通知解析器解析通知内容
-        val transactionInfo = transactionParser.parseWechatNotification(title, content)
-        
-        // 如果解析成功，保存交易记录
-        if (transactionInfo.isValid) {
-            saveTransaction(transactionInfo, "微信")
-        }
-    }
-
-    /**
-     * 判断微信通知是否与支付相关
-     */
-    private fun isPaymentRelatedNotification(title: String, content: String): Boolean {
-        val paymentKeywords = listOf("微信支付", "收款", "付款", "转账", "交易", "¥", "元")
-        
-        return paymentKeywords.any { title.contains(it) || content.contains(it) }
-    }
-
-    /**
-     * 保存交易记录到数据库
-     */
-    private fun saveTransaction(transaction: TransactionInfo, source: String) {
-        // 创建账单实体
-        val bill = BillEntity(
-            accountId = 1, // 默认账户ID，可以根据需要修改
-            type = transaction.type,
-            category = transaction.category,
-            amount = transaction.amount,
-            time = System.currentTimeMillis(),
-            remark = "[${source}自动记账] ${transaction.merchant} - ${transaction.remark}"
-        )
-
-        Log.d(TAG, "保存交易记录: $bill")
-        
-        // 在协程中执行数据库操作
+        // 在协程中处理通知
         serviceScope.launch {
             try {
-                val insertedId = billRepository.insertBill(bill)
-                Log.d(TAG, "账单保存成功，ID: $insertedId")
-                
-                // 显示记账成功通知
-                showRecordSuccessNotification(bill)
+                transactionParser.parseAndSave(packageName, title, text)
             } catch (e: Exception) {
-                Log.e(TAG, "保存账单失败", e)
+                Log.e(TAG, "处理通知失败", e)
             }
         }
     }
 
-    /**
-     * 显示记账成功通知
-     */
-    private fun showRecordSuccessNotification(bill: BillEntity) {
-        // 格式化时间
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-        val formattedDate = dateFormat.format(Date(bill.time))
-        
-        // 格式化金额
-        val formattedAmount = String.format("%.2f", bill.amount)
-        
-        // 通知内容
-        val notificationTitle = "自动记账成功"
-        val notificationContent = "${bill.type}: ${bill.category} - ¥$formattedAmount\n时间: $formattedDate"
-        
-        // 这里可以添加发送系统通知的代码，如果需要的话
-        Log.d(TAG, "记账成功: $notificationTitle - $notificationContent")
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        serviceJob.cancel() // Cancel the coroutine scope when the service is destroyed
+        Log.d(TAG, "通知监听服务销毁")
+        serviceJob.cancel()
     }
 
+    override fun onListenerConnected() {
+        super.onListenerConnected()
+        Log.d(TAG, "通知监听服务已连接")
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.d(TAG, "通知监听服务已断开")
+        // 请求重新连接
+        requestRebind(ComponentName(this, MyNotificationListener::class.java))
+    }
 } 

@@ -42,8 +42,8 @@ class TransactionParser @Inject constructor(
     // 支付宝转账通知模式：[支付宝] XX向你转了0.01元
     private val ALIPAY_TRANSFER_PATTERN = Pattern.compile("(.*?)向你转了(\\d+(\\.\\d+)?)元")
     
-    // 微信支付通知模式：[微信支付] 微信支付收款0.01元
-    private val WECHAT_PAYMENT_PATTERN = Pattern.compile("微信支付(收款|收款|付款)(\\d+(\\.\\d+)?)元")
+    // 微信支付通知模式 - 更新为新的格式
+    private val WECHAT_PAYMENT_PATTERN = Pattern.compile("已支付¥(\\d+(\\.\\d+)?)")
     
     // 微信转账通知模式：[微信] 你已成功收款0.01元
     private val WECHAT_TRANSFER_PATTERN = Pattern.compile("你已成功(收款|付款)(\\d+(\\.\\d+)?)元")
@@ -111,9 +111,7 @@ class TransactionParser @Inject constructor(
         // 处理微信支付通知
         var matcher = WECHAT_PAYMENT_PATTERN.matcher(content)
         if (matcher.find()) {
-            val payType = matcher.group(1) ?: "" // 收款或付款
-            val amount = matcher.group(2)?.toDoubleOrNull() ?: 0.0
-            val type = if (payType.contains("收款")) "收入" else "支出"
+            val amount = matcher.group(1)?.toDoubleOrNull() ?: 0.0
             
             // 提取商家信息
             val merchant = extractMerchant(content)
@@ -121,7 +119,7 @@ class TransactionParser @Inject constructor(
             
             return TransactionInfo(
                 isValid = true,
-                type = type,
+                type = "支出",
                 amount = amount,
                 merchant = merchant,
                 category = category,
@@ -153,6 +151,13 @@ class TransactionParser @Inject constructor(
      * 从通知内容中提取商家信息
      */
     private fun extractMerchant(content: String): String {
+        // 微信特定的商家提取逻辑
+        if (content.contains("微信支付")) {
+            val lines = content.split("\n")
+            // 通常商家名称在第一行
+            return lines.firstOrNull()?.trim() ?: "未知商家"
+        }
+        
         // 常见的商家信息前缀
         val prefixes = listOf("商家:", "收款方:", "店名:", "店铺:")
         
@@ -165,7 +170,6 @@ class TransactionParser @Inject constructor(
             }
         }
         
-        // 如果没有找到明确的商家标识，尝试从内容中推断
         return "未知商家"
     }
     
@@ -280,35 +284,48 @@ class TransactionParser @Inject constructor(
     }
 
     private suspend fun handleWechatNotification(title: String, content: String) {
-        when {
-            title == "微信支付" && content.contains("支付成功") -> {
-                val amount = extractAmount(content)
-                if (amount > 0) {
-                    saveBill(
-                        amount = amount,
-                        type = BillType.EXPENSE,
-                        category = "微信支付",
-                        note = content
-                    )
-                }
+        Log.d(TAG, "处理微信通知: title=$title, content=$content")
+        
+        // 处理微信支付通知
+        if (title == "微信支付·现在") {
+            val amount = extractAmount(content)
+            if (amount > 0) {
+                saveBill(
+                    amount = amount,
+                    type = BillType.EXPENSE,
+                    category = "微信支付",
+                    note = content
+                )
+                Log.d(TAG, "成功保存微信支付记录: 金额=$amount")
             }
-            title == "微信" && content.contains("[转账]") && content.contains("向你转账") -> {
-                val amount = extractAmount(content)
-                if (amount > 0) {
-                    saveBill(
-                        amount = amount,
-                        type = BillType.INCOME,
-                        category = "转账收款",
-                        note = content
-                    )
+        }
+        // 处理微信转账通知
+        else if (title == "微信" && content.contains("转账")) {
+            val amount = extractAmount(content)
+            if (amount > 0) {
+                val type = if (content.contains("向你转账") || content.contains("收款成功")) {
+                    BillType.INCOME
+                } else {
+                    BillType.EXPENSE
                 }
+                saveBill(
+                    amount = amount,
+                    type = type,
+                    category = "转账",
+                    note = content
+                )
+                Log.d(TAG, "成功保存微信转账记录: 金额=$amount, 类型=$type")
             }
         }
     }
 
     private fun extractAmount(content: String): Double {
-        val regex = """(\d+(\.\d{1,2})?)""".toRegex()
-        return regex.find(content)?.value?.toDoubleOrNull() ?: 0.0
+        // 匹配 ¥ 符号后面的数字
+        val regex = """¥(\d+(\.\d{1,2})?)""".toRegex()
+        val matchResult = regex.find(content)
+        val amount = matchResult?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+        Log.d(TAG, "提取金额: content=$content, amount=$amount")
+        return amount
     }
 
     private suspend fun saveBill(
@@ -326,5 +343,6 @@ class TransactionParser @Inject constructor(
         )
         val billEntity = BillEntity.fromBill(bill)
         billRepository.insertBill(billEntity)
+        Log.d(TAG, "保存账单: $billEntity")
     }
 } 

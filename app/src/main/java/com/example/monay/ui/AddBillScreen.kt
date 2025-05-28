@@ -297,6 +297,11 @@ fun TypeSelector(
                         .size(48.dp)
                         .clip(CircleShape)
                         .background(if (isSelected) color else color.copy(alpha = 0.1f))
+                        .border(
+                            width = if (isSelected) 0.dp else 1.dp,
+                            color = if (isSelected) Color.Transparent else color.copy(alpha = 0.3f),
+                            shape = CircleShape
+                        )
                 ) {
                     val icon = when(type) {
                         "支出" -> Icons.Default.ArrowDownward
