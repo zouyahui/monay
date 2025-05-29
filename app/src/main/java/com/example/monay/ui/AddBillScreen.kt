@@ -304,8 +304,8 @@ fun TypeSelector(
                         )
                 ) {
                     val icon = when(type) {
-                        "支出" -> Icons.Default.ArrowDownward
-                        "收入" -> Icons.Default.ArrowUpward
+                        "支出" -> Icons.Default.ArrowUpward
+                        "收入" -> Icons.Default.ArrowDownward
                         else -> Icons.Default.SwapHoriz
                     }
                     Icon(

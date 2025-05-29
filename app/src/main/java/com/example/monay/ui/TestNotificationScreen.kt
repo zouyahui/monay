@@ -297,6 +297,87 @@ fun TestNotificationScreen(context: Context) {
             ) {
                 Text("测试微信转账通知")
             }
+            
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // 支付宝信用卡交易提醒测试按钮
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "支付宝信用卡交易提醒",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "发送与截图一致的支付宝信用卡交易提醒",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Button(
+                        onClick = {
+                            try {
+                                val creditCardContent = "信用卡交易提醒\n" +
+                                    "尊敬的邓先生:\n" +
+                                    "您尾号3420的信用卡最新交易信息\n" +
+                                    "交易类型 消费\n" +
+                                    "交易时间 05月29日12:22\n" +
+                                    "交易商户 支付宝-国华顺景餐饮\n" +
+                                    "交易金额 200.00人民币\n" +
+                                    "可用额度 目前您个人消费卡账户可用额度为9427.86人民币"
+                                
+                                val notification = NotificationCompat.Builder(context, "test_channel")
+                                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                                    .setContentTitle("招商银行信用卡")
+                                    .setContentText(creditCardContent)
+                                    .setStyle(NotificationCompat.BigTextStyle().bigText(creditCardContent))
+                                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                                    .setAutoCancel(true)
+                                    .build()
+                                
+                                // 使用随机ID确保通知不会被覆盖
+                                val notificationId = System.currentTimeMillis().toInt()
+                                notificationManager.notify(notificationId, notification)
+                                
+                                Log.d(TAG, "已发送支付宝信用卡交易提醒测试通知: ID=$notificationId")
+                                snackbarMessage = "已发送支付宝信用卡交易提醒测试通知"
+                                showSnackbar = true
+                            } catch (e: Exception) {
+                                Log.e(TAG, "发送通知失败", e)
+                                snackbarMessage = "发送通知失败: ${e.message}"
+                                showSnackbar = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Text("发送信用卡交易提醒", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 } 

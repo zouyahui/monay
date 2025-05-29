@@ -407,8 +407,8 @@ fun DismissBackground(dismissState: DismissState) {
 @Composable
 fun BillCard(bill: BillEntity) {
     val (iconVector, iconTint, backgroundColor) = when(bill.type.lowercase()) {
-        "支出" -> Triple(Icons.Default.ArrowDownward, ExpenseColor, ExpenseColor.copy(alpha = 0.1f))
-        "收入" -> Triple(Icons.Default.ArrowUpward, IncomeColor, IncomeColor.copy(alpha = 0.1f))
+        "支出" -> Triple(Icons.Default.ArrowUpward, ExpenseColor, ExpenseColor.copy(alpha = 0.1f))
+        "收入" -> Triple(Icons.Default.ArrowDownward, IncomeColor, IncomeColor.copy(alpha = 0.1f))
         "转账" -> Triple(Icons.Default.SwapHoriz, TransferColor, TransferColor.copy(alpha = 0.1f))
         else -> Triple(Icons.Default.ShoppingCart, MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
     }

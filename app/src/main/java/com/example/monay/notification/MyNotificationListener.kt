@@ -34,6 +34,14 @@ class MyNotificationListener : NotificationListenerService() {
         private const val TRANSACTION_NOTIFICATION_BASE_ID = 1000
         private var lastNotificationTime = 0L
         private const val MIN_NOTIFICATION_INTERVAL = 3000 // 3秒最小间隔
+        
+        // 添加银行APP包名
+        private val BANK_PACKAGES = listOf(
+            "cmb.pb", // 招商银行
+            "com.icbc", // 工商银行
+            "com.ccb.android", // 建设银行
+            "com.chinamworld.main" // 中国银行
+        )
     }
 
     @Inject
@@ -121,7 +129,7 @@ class MyNotificationListener : NotificationListenerService() {
             val isTestNotification = isTestNotification(packageName, notification)
             
             // 如果不是目标应用的通知且不是测试通知，则跳过
-            if (!targetPackages.contains(packageName) && !isTestNotification) {
+            if (!targetPackages.contains(packageName) && !isTestNotification && !BANK_PACKAGES.contains(packageName)) {
                 Log.d(TAG, "跳过非目标应用通知: $packageName")
                 return
             }
@@ -140,12 +148,26 @@ class MyNotificationListener : NotificationListenerService() {
                 return
             }
             
+            // 特殊处理银行信用卡交易提醒
+            if (title.contains("信用卡") || title.contains("招商银行") || text.contains("信用卡交易提醒")) {
+                Log.i(TAG, "检测到信用卡交易提醒: 标题=$title, 内容=$text")
+                processNotification(packageName, title, text, isTestNotification)
+                return
+            }
+            
             // 特殊处理测试通知
             if (isTestNotification) {
                 Log.i(TAG, "检测到测试通知: 标题=$title, 内容=$text")
                 // 如果是微信支付测试通知，使用与真实微信通知相同的处理流程
                 if (title.contains("微信") && (text.contains("支付") || text.contains("已支付"))) {
                     Log.i(TAG, "处理微信支付测试通知")
+                    processNotification(packageName, title, text, true)
+                    return
+                }
+                
+                // 处理支付宝信用卡交易提醒测试通知
+                if (title.contains("招商银行信用卡") && text.contains("信用卡交易提醒")) {
+                    Log.i(TAG, "处理支付宝信用卡交易提醒测试通知")
                     processNotification(packageName, title, text, true)
                     return
                 }

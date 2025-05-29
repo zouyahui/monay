@@ -53,6 +53,9 @@ class TransactionParser @Inject constructor(
     // 微信转账通知模式：[微信] 你已成功收款0.01元
     private val WECHAT_TRANSFER_PATTERN = Pattern.compile("你已成功(收款|付款)(\\d+(\\.\\d+)?)元")
     
+    // 支付宝信用卡交易提醒模式：信用卡交易提醒 尊敬的邓先生: 您尾号3420的信用卡最新交易信息 交易类型 消费 交易时间 05月29日12:22 交易商户 支付宝-国华顺景餐饮 交易金额 200.00人民币
+    private val ALIPAY_CREDIT_CARD_PATTERN = Pattern.compile("信用卡交易提醒.*交易金额\\s+(\\d+(\\.\\d{1,2})?)人民币")
+    
     /**
      * 解析通知并返回交易信息
      * 这是一个统一的入口方法，支持处理实际通知和测试通知
@@ -109,8 +112,38 @@ class TransactionParser @Inject constructor(
         
         Log.d(TAG, "解析支付宝通知：title=$title, content=$content")
         
+        // 处理支付宝信用卡交易提醒
+        var matcher = ALIPAY_CREDIT_CARD_PATTERN.matcher(content)
+        if (matcher.find()) {
+            val amount = matcher.group(1)?.toDoubleOrNull() ?: 0.0
+            
+            // 提取商家信息
+            val merchantRegex = "交易商户\\s+([^\\n]+)".toRegex()
+            val merchantMatch = merchantRegex.find(content)
+            val merchant = merchantMatch?.groupValues?.get(1) ?: "未知商家"
+            
+            // 确定交易类型（默认为支出）
+            val type = "支出"
+            
+            // 提取交易类型用于分类
+            val categoryRegex = "交易类型\\s+([^\\n]+)".toRegex()
+            val categoryMatch = categoryRegex.find(content)
+            val transactionType = categoryMatch?.groupValues?.get(1) ?: "消费"
+            
+            val category = categorizeTransaction(merchant, transactionType)
+            
+            return TransactionInfo(
+                isValid = true,
+                type = type,
+                amount = amount,
+                merchant = merchant,
+                category = category,
+                remark = "信用卡交易: $merchant"
+            )
+        }
+        
         // 处理支付宝支付通知
-        var matcher = ALIPAY_PAYMENT_PATTERN.matcher(content)
+        matcher = ALIPAY_PAYMENT_PATTERN.matcher(content)
         if (matcher.find()) {
             val payType = matcher.group(1) // 收款或付款
             val amount = matcher.group(2)?.toDoubleOrNull() ?: 0.0
