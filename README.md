@@ -796,3 +796,21 @@
   - **广播接收机制**：在MainActivity中添加TransactionReceiver，接收并处理交易广播
   - **数据流优化**：实现从通知解析 → 广播传递 → UI更新的完整数据流
   - **错误处理**：增强了日志记录和异常处理，便于问题诊断
+
+### v1.3.9 支付宝交易提醒解析功能（2025-08-01）
+
+- **修复问题**：解决支付宝交易提醒通知无法被正确解析的问题
+- **改进措施**：
+  - 添加了对"你有一笔XX元的支出/收入"格式支付宝通知的解析支持
+  - 优化了通知监听器，增加对新格式支付宝通知的识别逻辑
+  - 添加了测试功能，方便用户测试新格式支付宝通知
+  - 增强了日志记录，便于排查支付宝通知解析问题
+- **涉及文件**：
+  - `app/src/main/java/com/example/monay/notification/TransactionParser.kt`
+  - `app/src/main/java/com/example/monay/notification/MyNotificationListener.kt`
+  - `app/src/main/java/com/example/monay/ui/TestNotificationScreen.kt`
+- **技术说明**：
+  - **正则表达式增强**：添加了`ALIPAY_TRANSACTION_REMINDER_PATTERN`正则表达式，匹配"你有一笔XX元的支出/收入"格式
+  - **通知识别优化**：在`MyNotificationListener`中添加了对支付宝交易提醒通知的特殊处理逻辑
+  - **测试功能增强**：在测试界面添加了支付宝交易提醒测试按钮，方便用户测试新功能
+  - **日志系统优化**：增加了详细的日志记录，包括通知接收、解析过程和结果

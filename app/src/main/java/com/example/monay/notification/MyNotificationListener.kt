@@ -171,6 +171,20 @@ class MyNotificationListener : NotificationListenerService() {
                     processNotification(packageName, title, text, true)
                     return
                 }
+                
+                // 处理支付宝交易提醒测试通知
+                if (title.contains("交易提醒") && text.contains("你有一笔")) {
+                    Log.i(TAG, "处理支付宝交易提醒测试通知")
+                    processNotification(packageName, title, text, true)
+                    return
+                }
+            }
+            
+            // 特殊处理支付宝交易提醒通知
+            if ((packageName == ALIPAY_PACKAGE || isTestNotification) && text.contains("你有一笔") && text.contains("元的支出")) {
+                Log.i(TAG, "检测到支付宝交易提醒通知: 标题=$title, 内容=$text")
+                processNotification(packageName, title, text, isTestNotification)
+                return
             }
             
             // 处理实际通知
@@ -198,8 +212,9 @@ class MyNotificationListener : NotificationListenerService() {
         // 检查通知内容是否符合测试通知特征
         val isMockWechatPay = title.contains("微信") && (text.contains("支付") || text.contains("已支付"))
         val isMockAlipay = title.contains("支付宝") && (text.contains("付款") || text.contains("转"))
+        val isMockAlipayTransaction = title.contains("交易提醒") && text.contains("你有一笔")
         
-        val isTestNotification = isMockWechatPay || isMockAlipay
+        val isTestNotification = isMockWechatPay || isMockAlipay || isMockAlipayTransaction
         if (isTestNotification) {
             Log.d(TAG, "检测到应用内测试通知: $title - $text")
         }

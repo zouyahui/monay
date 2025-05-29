@@ -56,6 +56,9 @@ class TransactionParser @Inject constructor(
     // 支付宝信用卡交易提醒模式：信用卡交易提醒 尊敬的邓先生: 您尾号3420的信用卡最新交易信息 交易类型 消费 交易时间 05月29日12:22 交易商户 支付宝-国华顺景餐饮 交易金额 200.00人民币
     private val ALIPAY_CREDIT_CARD_PATTERN = Pattern.compile("信用卡交易提醒.*交易金额\\s+(\\d+(\\.\\d{1,2})?)人民币")
     
+    // 支付宝交易提醒模式：你有一笔660.00元的支出，点击领取40个支付宝积分。
+    private val ALIPAY_TRANSACTION_REMINDER_PATTERN = Pattern.compile("你有一笔(\\d+(\\.\\d+)?)元的(支出|收入)")
+    
     /**
      * 解析通知并返回交易信息
      * 这是一个统一的入口方法，支持处理实际通知和测试通知
@@ -112,8 +115,30 @@ class TransactionParser @Inject constructor(
         
         Log.d(TAG, "解析支付宝通知：title=$title, content=$content")
         
+        // 处理支付宝交易提醒通知（新格式）
+        var matcher = ALIPAY_TRANSACTION_REMINDER_PATTERN.matcher(content)
+        if (matcher.find()) {
+            val amount = matcher.group(1)?.toDoubleOrNull() ?: 0.0
+            val transactionType = matcher.group(3) ?: "支出" // 支出或收入，提供默认值避免null
+            
+            // 提取商家信息，这种通知格式可能没有明确的商家信息
+            val merchant = "支付宝交易"
+            val category = "其他" // 默认分类为"其他"，因为这种通知格式通常没有足够信息进行分类
+            
+            Log.d(TAG, "匹配到支付宝交易提醒：金额=$amount, 类型=$transactionType")
+            
+            return TransactionInfo(
+                isValid = true,
+                type = transactionType,
+                amount = amount,
+                merchant = merchant,
+                category = category,
+                remark = content
+            )
+        }
+        
         // 处理支付宝信用卡交易提醒
-        var matcher = ALIPAY_CREDIT_CARD_PATTERN.matcher(content)
+        matcher = ALIPAY_CREDIT_CARD_PATTERN.matcher(content)
         if (matcher.find()) {
             val amount = matcher.group(1)?.toDoubleOrNull() ?: 0.0
             

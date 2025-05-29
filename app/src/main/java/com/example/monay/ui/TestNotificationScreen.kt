@@ -378,6 +378,79 @@ fun TestNotificationScreen(context: Context) {
                     }
                 }
             }
+            
+            Divider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            // 支付宝交易提醒测试按钮（新格式）
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "支付宝交易提醒（新格式）",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Text(
+                        text = "发送与截图一致的支付宝交易提醒通知",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Button(
+                        onClick = {
+                            try {
+                                val transactionContent = "你有一笔660.00元的支出，点击领取40个支付宝积分。"
+                                
+                                val notification = NotificationCompat.Builder(context, "test_channel")
+                                    .setSmallIcon(R.drawable.ic_launcher_foreground)
+                                    .setContentTitle("交易提醒")
+                                    .setContentText(transactionContent)
+                                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                                    .setAutoCancel(true)
+                                    .build()
+                                
+                                // 使用随机ID确保通知不会被覆盖
+                                val notificationId = System.currentTimeMillis().toInt()
+                                notificationManager.notify(notificationId, notification)
+                                
+                                Log.d(TAG, "已发送支付宝交易提醒测试通知: ID=$notificationId")
+                                snackbarMessage = "已发送支付宝交易提醒测试通知"
+                                showSnackbar = true
+                            } catch (e: Exception) {
+                                Log.e(TAG, "发送通知失败", e)
+                                snackbarMessage = "发送通知失败: ${e.message}"
+                                showSnackbar = true
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    ) {
+                        Text("发送交易提醒通知", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 } 
